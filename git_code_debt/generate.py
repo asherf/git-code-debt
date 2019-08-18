@@ -9,23 +9,16 @@ import io
 import itertools
 import multiprocessing.pool
 import os.path
-import sqlite3
 
-import pkg_resources
 import six
 
 from git_code_debt import options
+from git_code_debt.database import WriteableDatabaseLogic
 from git_code_debt.discovery import get_metric_parsers_from_args
 from git_code_debt.file_diff_stat import get_file_diff_stats_from_output
 from git_code_debt.generate_config import GenerateOptions
-from git_code_debt.logic import get_metric_has_data
-from git_code_debt.logic import get_metric_mapping
-from git_code_debt.logic import get_metric_values
-from git_code_debt.logic import get_previous_sha
 from git_code_debt.repo_parser import RepoParser
 from git_code_debt.util import yaml
-from git_code_debt.write_logic import insert_metric_changes
-from git_code_debt.write_logic import insert_metric_values
 
 
 def get_metrics(commit, diff, metric_parsers, exclude):
@@ -67,14 +60,6 @@ def mapper(jobs):
             yield pool.imap
 
 
-def update_has_data(db, metrics, metric_mapping, has_data):
-    query = 'UPDATE metric_names SET has_data=1 WHERE id = ?'
-    for metric_id in [metric_mapping[m.name] for m in metrics if m.value]:
-        if not has_data[metric_id]:
-            has_data[metric_id] = True
-            db.execute(query, (metric_id,))
-
-
 def load_data(
         database_file,
         repo,
@@ -85,14 +70,14 @@ def load_data(
 ):
     metric_parsers = get_metric_parsers_from_args(package_names, skip_defaults)
 
-    with sqlite3.connect(database_file) as db:
-        metric_mapping = get_metric_mapping(db)
-        has_data = get_metric_has_data(db)
+    with WriteableDatabaseLogic.for_sqlite(database_file) as db_logic:
+        metric_mapping = db_logic.get_metric_mapping()
+        has_data = db_logic.get_metric_has_data()
 
         repo_parser = RepoParser(repo)
 
         with repo_parser.repo_checked_out():
-            previous_sha = get_previous_sha(db)
+            previous_sha = db_logic.get_previous_sha()
             commits = repo_parser.get_commits(since_sha=previous_sha)
 
             # If there is nothing to check gtfo
@@ -106,7 +91,7 @@ def load_data(
             compare_commit = None
             if previous_sha is not None:
                 compare_commit = commits.pop(0)
-                metric_values.update(get_metric_values(db, compare_commit.sha))
+                metric_values.update(db_logic.get_metric_values(compare_commit.sha))
 
             mp_args = six.moves.zip(
                 [compare_commit] + commits,
@@ -119,21 +104,10 @@ def load_data(
                 for commit, metrics in six.moves.zip(
                         commits, do_map(_get_metrics_inner, mp_args),
                 ):
-                    update_has_data(db, metrics, metric_mapping, has_data)
+                    db_logic.update_has_data(metrics, metric_mapping, has_data)
                     increment_metrics(metric_values, metric_mapping, metrics)
-                    insert_metric_values(db, metric_values, has_data, commit)
-                    insert_metric_changes(db, metrics, metric_mapping, commit)
-
-
-def create_schema(db):
-    """Creates the database schema."""
-    schema_dir = pkg_resources.resource_filename('git_code_debt', 'schema')
-    schema_files = os.listdir(schema_dir)
-
-    for sql_file in schema_files:
-        resource_filename = os.path.join(schema_dir, sql_file)
-        with open(resource_filename, 'r') as resource:
-            db.executescript(resource.read())
+                    db_logic.insert_metric_values(metric_values, has_data, commit)
+                    db_logic.insert_metric_changes(metrics, metric_mapping, commit)
 
 
 def get_metrics_info(metric_parsers):
@@ -143,22 +117,17 @@ def get_metrics_info(metric_parsers):
     return sorted(metrics_info)
 
 
-def insert_metrics_info(db, metrics_info):
-    query = 'INSERT INTO metric_names (name, description) VALUES (?, ?)'
-    db.executemany(query, metrics_info)
-
-
-def populate_metric_ids(db, package_names, skip_defaults):
+def populate_metric_ids(db_logic, package_names, skip_defaults):
     metric_parsers = get_metric_parsers_from_args(package_names, skip_defaults)
     metrics_info = get_metrics_info(metric_parsers)
-    insert_metrics_info(db, metrics_info)
+    db_logic.insert_metrics_info(metrics_info)
 
 
 def create_database(args):
-    with sqlite3.connect(args.database) as db:
-        create_schema(db)
+    with WriteableDatabaseLogic.for_sqlite(args.database) as db_logic:
+        db_logic.create_schema()
         populate_metric_ids(
-            db,
+            db_logic,
             args.metric_package_names,
             args.skip_default_metrics,
         )

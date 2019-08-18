@@ -5,11 +5,11 @@ from __future__ import unicode_literals
 import argparse
 import os.path
 import shutil
-import sqlite3
 
 import flask
 import pkg_resources
 
+from git_code_debt.database import DatabaseLogic
 from git_code_debt.server.metric_config import Config
 from git_code_debt.server.servlets.changes import changes
 from git_code_debt.server.servlets.commit import commit
@@ -37,13 +37,13 @@ class AppContext(object):
 @app.before_request
 def before_request():
     flask.g.config = AppContext.config
-    flask.g.db = sqlite3.connect(AppContext.database_path)
+    flask.g.db_logic = DatabaseLogic.for_sqlite(AppContext.database_path)
 
 
 @app.teardown_request
 def teardown_request(_):
     flask.g.config = None
-    flask.g.db.close()
+    flask.g.db_logic.close()
 
 
 def create_metric_config_if_not_exists():

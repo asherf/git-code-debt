@@ -5,13 +5,13 @@ import collections
 import contextlib
 import io
 import os.path
-import sqlite3
 import subprocess
 
 import pytest
 import six
 
-from git_code_debt.generate import create_schema
+from git_code_debt.database import DatabaseLogic
+from git_code_debt.database import WriteableDatabaseLogic
 from git_code_debt.generate import populate_metric_ids
 from git_code_debt.repo_parser import Commit
 from git_code_debt.repo_parser import COMMIT_FORMAT
@@ -55,17 +55,18 @@ class Sandbox(collections.namedtuple('Sandbox', ['directory'])):
         return path
 
     @contextlib.contextmanager
-    def db(self):
-        with sqlite3.connect(self.db_path) as db:
-            yield db
+    def db_logic(self, writeable=False):
+        db_logic_cls = WriteableDatabaseLogic if writeable else DatabaseLogic
+        with db_logic_cls.for_sqlite(self.db_path) as db_logic:
+            yield db_logic
 
 
 @pytest.fixture
 def sandbox(tempdir_factory):
     ret = Sandbox(tempdir_factory.get())
-    with ret.db() as db:
-        create_schema(db)
-        populate_metric_ids(db, (), False)
+    with ret.db_logic(writeable=True) as db_logic:
+        db_logic.create_schema()
+        populate_metric_ids(db_logic, (), False)
 
     yield ret
 

@@ -3,7 +3,6 @@ from __future__ import unicode_literals
 
 import flask
 
-from git_code_debt.server import logic
 from git_code_debt.server.presentation.commit_delta import CommitDelta
 from git_code_debt.server.presentation.delta import Delta
 from git_code_debt.server.render_mako import render_template
@@ -14,7 +13,8 @@ commit = flask.Blueprint('commit', __name__)
 
 @commit.route('/commit/<sha>')
 def show(sha):
-    changes = logic.get_metric_changes(flask.g.db, sha)
+
+    changes = flask.g.db_logic.get_metric_changes(sha)
 
     commit_deltas = sorted(
         CommitDelta.from_data(

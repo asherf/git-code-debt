@@ -7,7 +7,6 @@ import datetime
 
 import flask
 
-from git_code_debt.server import logic
 from git_code_debt.server.presentation.delta import Delta
 from git_code_debt.server.render_mako import render_template
 from git_code_debt.util.time import to_timestamp
@@ -132,17 +131,18 @@ def format_groups(
 
 @index.route('/')
 def show():
-    metric_names = logic.get_metric_ids(flask.g.db)
+    db_logic = flask.g.db_logic
+    metric_names = db_logic.get_metric_ids()
     today = datetime.datetime.today()
     today_timestamp = to_timestamp(today)
     offsets = [
         (time_name, to_timestamp(today - offset))
         for (time_name, offset) in DATE_NAMES_TO_TIMEDELTAS
     ]
-    current_values = logic.get_metrics_for_sha(logic.get_latest_sha())
+    current_values = db_logic.get_metrics_for_sha(db_logic.get_latest_sha())
     metric_data = {
         time_name:
-        logic.get_metrics_for_sha(logic.get_sha_for_date(timestamp))
+        db_logic.get_metrics_for_sha(db_logic.get_sha_for_date(timestamp))
         for (time_name, timestamp) in offsets
     }
 

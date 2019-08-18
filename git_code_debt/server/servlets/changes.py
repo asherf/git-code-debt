@@ -6,7 +6,6 @@ import json
 
 import flask
 
-from git_code_debt.server import logic
 from git_code_debt.server.presentation.commit_delta import CommitDelta
 from git_code_debt.server.presentation.delta import Delta
 from git_code_debt.server.render_mako import render_template
@@ -19,11 +18,11 @@ changes = flask.Blueprint('changes', __name__)
 def show(metric_name, start_timestamp, end_timestamp):
     start_timestamp = int(start_timestamp)
     end_timestamp = int(end_timestamp)
-    metric_info = logic.get_metric_info(flask.g.db, metric_name)
+    metric_info = flask.g.db_logic.get_metric_info(metric_name)
 
     metric_changes = sorted(
-        logic.get_major_changes_for_metric(
-            flask.g.db, start_timestamp, end_timestamp, metric_info.id,
+        flask.g.db_logic.get_major_changes_for_metric(
+            start_timestamp, end_timestamp, metric_info.id,
         ),
     )
     metric_changes = [

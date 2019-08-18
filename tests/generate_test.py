@@ -5,12 +5,11 @@ import collections
 import io
 import os.path
 import re
-import sqlite3
 
 import pytest
 
+from git_code_debt.database import WriteableDatabaseLogic
 from git_code_debt.generate import _get_metrics_inner
-from git_code_debt.generate import create_schema
 from git_code_debt.generate import get_options_from_config
 from git_code_debt.generate import increment_metrics
 from git_code_debt.generate import main
@@ -81,8 +80,8 @@ def test_main_database_does_not_exist(sandbox, cloneable):
 
 
 def get_metric_data_count(sandbox):
-    with sandbox.db() as db:
-        return db.execute('SELECT COUNT(*) FROM metric_data').fetchone()[0]
+    with sandbox.db_logic() as db_logic:
+        return db_logic._fetch_one('SELECT COUNT(*) FROM metric_data')[0]
 
 
 def test_generate_integration_previous_data(sandbox, cloneable_with_commits):
@@ -159,7 +158,7 @@ def test_internal_zero_populated(sandbox, cloneable):
         cmd_output('git', 'revert', 'HEAD', '--no-edit')
 
     assert not main(('-C', sandbox.gen_config(repo=cloneable)))
-    with sandbox.db() as db:
+    with sandbox.db_logic() as db_logic:
         query = (
             'SELECT running_value\n'
             'FROM metric_data\n'
@@ -167,7 +166,7 @@ def test_internal_zero_populated(sandbox, cloneable):
             '    metric_data.metric_id == metric_names.id\n'
             'WHERE name = "TotalLinesOfCode_python"\n'
         )
-        vals = [x for x, in db.execute(query).fetchall()]
+        vals = [x for x, in db_logic._fetch_all(query)]
         assert vals == [1, 0, 1]
 
 
@@ -176,7 +175,7 @@ def test_exclude_pattern(sandbox, cloneable_with_commits):
         repo=cloneable_with_commits.path, exclude=r'\.tmpl$',
     )
     assert not main(('-C', cfg))
-    with sandbox.db() as db:
+    with sandbox.db_logic() as db_logic:
         query = (
             'SELECT running_value\n'
             'FROM metric_data\n'
@@ -185,7 +184,7 @@ def test_exclude_pattern(sandbox, cloneable_with_commits):
             'WHERE sha = ? AND name = "TotalLinesOfCode"\n'
         )
         sha = cloneable_with_commits.commits[-1].sha
-        val, = db.execute(query, (sha,)).fetchone()
+        val, = db_logic._fetch_one(query, (sha,))
         # 2 lines of code from test.py, 0 lines from foo.tmpl (2 lines)
         assert val == 2
 
@@ -196,12 +195,11 @@ def test_get_options_from_config_no_config_file():
 
 
 def test_create_schema(tmpdir):
-    with sqlite3.connect(tmpdir.join('db.db').strpath) as db:
-        create_schema(db)
-
-        results = db.execute(
+    with WriteableDatabaseLogic.for_tests(tmpdir) as db_logic:
+        db_logic.create_schema()
+        results = db_logic._fetch_all(
             "SELECT name FROM sqlite_master WHERE type = 'table'",
-        ).fetchall()
+        )
         table_names = [table_name for table_name, in results]
 
         assert 'metric_names' in table_names
@@ -209,10 +207,10 @@ def test_create_schema(tmpdir):
 
 
 def test_populate_metric_ids(tmpdir):
-    with sqlite3.connect(tmpdir.join('db.db').strpath) as db:
-        create_schema(db)
-        populate_metric_ids(db, (), False)
+    with WriteableDatabaseLogic.for_tests(tmpdir) as db_logic:
+        db_logic.create_schema()
+        populate_metric_ids(db_logic, (), False)
 
-        results = db.execute('SELECT * FROM metric_names').fetchall()
+        results = db_logic._fetch_all('SELECT * FROM metric_names')
         # Smoke test assertion
         assert results

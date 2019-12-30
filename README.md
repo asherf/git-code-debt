@@ -1,5 +1,5 @@
-[![Build Status](https://asottile.visualstudio.com/asottile/_apis/build/status/asottile.git-code-debt?branchName=master)](https://asottile.visualstudio.com/asottile/_build/latest?definitionId=16&branchName=master)
-[![Azure DevOps coverage](https://img.shields.io/azure-devops/coverage/asottile/asottile/16/master.svg)](https://dev.azure.com/asottile/asottile/_build/latest?definitionId=16&branchName=master)
+[![Build Status](https://travis-ci.org/asherf/git-code-debt.svg?branch=master)](https://travis-ci.org/asherf/git-code-debt)
+[![Coverage Status](https://coveralls.io/repos/github/asherf/git-code-debt/badge.svg?branch=master)](https://coveralls.io/github/asherf/git-code-debt?branch=master)
 
 git-code-debt
 =============
